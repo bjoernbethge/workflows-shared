@@ -1,0 +1,113 @@
+name: Docker Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      dockerfile:
+        description: 'Path to Dockerfile'
+        required: false
+        default: 'Dockerfile'
+        type: string
+      context:
+        description: 'Build context directory'
+        required: false
+        default: '.'
+        type: string
+      platforms:
+        description: 'Target platforms (comma-separated)'
+        required: false
+        default: 'linux/amd64'
+        type: string
+      push-dockerhub:
+        description: 'Push to Docker Hub in addition to GHCR'
+        required: false
+        default: false
+        type: boolean
+      dockerhub-username:
+        description: 'Docker Hub username'
+        required: false
+        default: ''
+        type: string
+      image-name:
+        description: 'Override image name (default: repo name)'
+        required: false
+        default: ''
+        type: string
+    secrets:
+      DOCKERHUB_TOKEN:
+        description: 'Docker Hub access token (required if push-dockerhub is true)'
+        required: false
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        if: contains(inputs.platforms, 'linux/arm')
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Determine image name
+        id: image
+        run: |
+          if [ -n "${{ inputs.image-name }}" ]; then
+            IMAGE_NAME="${{ inputs.image-name }}"
+          else
+            IMAGE_NAME="${GITHUB_REPOSITORY#*/}"
+          fi
+          echo "name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/${{ steps.image.outputs.name }}
+            ${{ inputs.push-dockerhub && format('docker.io/{0}/{1}', inputs.dockerhub-username, steps.image.outputs.name) || '' }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: ${{ inputs.push-dockerhub }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ inputs.dockerhub-username }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: ${{ inputs.platforms }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image digest
+        run: echo "Built and pushed image with digest ${{ steps.meta.outputs.tags }}"

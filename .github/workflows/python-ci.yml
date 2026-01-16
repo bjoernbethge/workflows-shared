@@ -1,0 +1,159 @@
+name: Python CI
+
+on:
+  workflow_call:
+    inputs:
+      python-versions:
+        description: 'JSON array of Python versions to test'
+        required: false
+        default: '["3.11", "3.12"]'
+        type: string
+      src-path:
+        description: 'Source code path for linting/type checking'
+        required: false
+        default: 'src/'
+        type: string
+      test-path:
+        description: 'Test path for pytest'
+        required: false
+        default: 'tests/'
+        type: string
+      test-command:
+        description: 'Command to run tests'
+        required: false
+        default: 'uv run pytest'
+        type: string
+      run-mypy:
+        description: 'Run mypy type checking'
+        required: false
+        default: true
+        type: boolean
+      coverage-report:
+        description: 'Generate coverage report'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  lint:
+    name: Lint (Ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Cache uv dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            ~/.cache/uv
+          key: ${{ runner.os }}-uv-lint-${{ hashFiles('**/uv.lock', '**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-lint-
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev || uv sync --group dev
+
+      - name: Run ruff linter
+        run: uv run ruff check ${{ inputs.src-path }} ${{ inputs.test-path }}
+
+      - name: Run ruff formatter check
+        run: uv run ruff format --check ${{ inputs.src-path }} ${{ inputs.test-path }}
+
+  type-check:
+    name: Type Check (mypy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ inputs.run-mypy }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Cache uv dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            ~/.cache/uv
+          key: ${{ runner.os }}-uv-typecheck-${{ hashFiles('**/uv.lock', '**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-typecheck-
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev || uv sync --group dev
+
+      - name: Run mypy
+        run: uv run mypy ${{ inputs.src-path }}
+
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJson(inputs.python-versions) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Cache uv dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            ~/.cache/uv
+          key: ${{ runner.os }}-uv-test-py${{ matrix.python-version }}-${{ hashFiles('**/uv.lock', '**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-test-py${{ matrix.python-version }}-
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev || uv sync --group dev
+
+      - name: Run tests
+        run: |
+          if [ "${{ inputs.coverage-report }}" = "true" ]; then
+            ${{ inputs.test-command }} --cov=${{ inputs.src-path }} --cov-report=xml --cov-report=term-missing
+          else
+            ${{ inputs.test-command }}
+          fi
+
+      - name: Upload coverage reports
+        if: ${{ inputs.coverage-report && matrix.python-version == '3.11' }}
+        uses: codecov/codecov-action@v5
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          fail_ci_if_error: false
