@@ -67,7 +67,7 @@ Python CI workflow with:
 
 Since this repository contains reusable workflows rather than executable code:
 
-1. **YAML syntax validation**: Ensure YAML syntax is correct - use `yamllint` or GitHub's workflow validation before pushing
+1. **YAML linting**: Ensure YAML syntax is correct - use `yamllint` or GitHub's workflow validation before pushing
 2. **Workflow syntax**: GitHub Actions will validate workflow syntax on push
 3. **Test in downstream repositories**: The best way to test workflow changes is to use them in a real repository that calls the workflow
 
