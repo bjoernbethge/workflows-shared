@@ -16,7 +16,7 @@ This repository provides shared, reusable GitHub Actions workflows that can be c
 ## Available Workflows
 
 ### docker-build-push.yml
-Builds Docker images and pushes to GitHub Container Registry (GHCR) and optionally Docker Hub. Supports:
+Builds Docker images and pushes to GitHub Container Registry (GHCR) and optionally Docker Hub. Features:
 - Multi-platform builds (amd64, arm64)
 - Smart tagging (latest, semver, SHA, branch)
 - Layer caching with GitHub Actions cache
@@ -67,9 +67,9 @@ Python CI workflow with:
 
 Since this repository contains reusable workflows rather than executable code:
 
-1. **No local testing needed**: The workflows are validated when called by other repositories
-2. **Syntax validation**: Ensure YAML syntax is correct (GitHub Actions will validate on push)
-3. **Test in downstream repositories**: The best way to test workflow changes is to use them in a real repository
+1. **YAML syntax validation**: Ensure YAML syntax is correct - use `yamllint` or GitHub's workflow validation before pushing
+2. **Workflow syntax**: GitHub Actions will validate workflow syntax on push
+3. **Test in downstream repositories**: The best way to test workflow changes is to use them in a real repository that calls the workflow
 
 ## Common Tasks
 
